@@ -3,7 +3,10 @@ load_dotenv()
 
 from fastapi import FastAPI
 from api.routes import router
+from config.database import engine
+from models.db_models import Base
 
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
