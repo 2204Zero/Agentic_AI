@@ -1,28 +1,26 @@
 from utils.llm import call_llm, extract_json
 
-async def run(code: str, issues: dict):
+async def fix_generator_agent(issues: list):
     prompt = f"""
-You are a Fix Generator.
+You are a strict JSON generator.
 
-Given Python code and its issues, generate fixes.
-
-Return ONLY valid JSON.
+Rules:
+- Output ONLY valid JSON
+- No explanation
+- No markdown
+- No extra text
+- Response must start with [ and end with ]
 
 Format:
-{{
-  "fixes": [
-    {{
-      "issue_title": "",
-      "original_snippet": "",
-      "fixed_snippet": ""
-    }}
-  ]
-}}
+[
+  {{
+    "issue": "",
+    "fix": ""
+  }}
+]
 
-Code:
-{code}
+Based on the following issues, generate fixes:
 
-Issues:
 {issues}
 """
 

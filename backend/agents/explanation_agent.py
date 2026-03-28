@@ -1,30 +1,24 @@
 from utils.llm import call_llm, extract_json
 
-async def run(issues: dict, fixes: dict):
+async def explanation_agent(analysis: dict):
     prompt = f"""
-You are an Explanation Agent.
+You are a strict JSON generator.
 
-Explain each issue and its fix clearly.
-
-Return ONLY JSON.
+Rules:
+- Output ONLY valid JSON
+- No explanation
+- No markdown
+- No extra text
+- Response must start with {{ and end with }}
 
 Format:
 {{
-  "explanations": [
-    {{
-      "issue_title": "",
-      "what": "",
-      "why": "",
-      "how": ""
-    }}
-  ]
+  "explanation": ""
 }}
 
-Issues:
-{issues}
+Explain the following code analysis clearly:
 
-Fixes:
-{fixes}
+{analysis}
 """
 
     response = await call_llm(prompt)

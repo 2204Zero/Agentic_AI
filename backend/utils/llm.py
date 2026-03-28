@@ -1,20 +1,36 @@
-import requests
+import httpx
 import json
-import re
+
 
 def extract_json(text: str):
+    # ensure text is string
+    if not isinstance(text, str):
+        return text
+
+    # try direct parse
     try:
-        # Direct parse attempt
         return json.loads(text)
     except:
         pass
 
-    # Try extracting JSON block
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    
-    if match:
+    # find JSON object {}
+    start_obj = text.find("{")
+    end_obj = text.rfind("}")
+
+    # find JSON array []
+    start_arr = text.find("[")
+    end_arr = text.rfind("]")
+
+    # choose correct block
+    if start_arr != -1 and (start_arr < start_obj or start_obj == -1):
         try:
-            return json.loads(match.group())
+            return json.loads(text[start_arr:end_arr+1])
+        except:
+            pass
+
+    if start_obj != -1:
+        try:
+            return json.loads(text[start_obj:end_obj+1])
         except:
             pass
 
@@ -22,14 +38,20 @@ def extract_json(text: str):
         "error": "Could not extract JSON",
         "raw_output": text
     }
-async def call_llm(prompt: str):
-    response = requests.post(
-        "http://localhost:11434/api/generate",
-        json={
-            "model": "llama3",
-            "prompt": prompt,
-            "stream": False
-        }
-    )
 
-    return response.json()["response"]
+
+async def call_llm(prompt: str):
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3",
+                "prompt": prompt,
+                "stream": False
+            }
+        )
+
+        data = response.json()
+
+        # ALWAYS return STRING (no parsing here)
+        return data.get("response", "")
