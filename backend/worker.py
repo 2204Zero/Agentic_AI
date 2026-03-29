@@ -12,38 +12,58 @@ from config.redis_client import redis_client
 from models.db_models import Job
 
 
+# ---------------- RECOVERY (IMPORTANT) ---------------- #
+
+def recover_pending_jobs(db):
+    print("Recovering pending jobs...")
+
+    pending_jobs = db.query(Job).filter(Job.status == "pending").all()
+
+    for job in pending_jobs:
+        redis_client.lpush(
+            "job_queue",
+            json.dumps({"job_id": job.id})
+        )
+
+    print(f"Recovered {len(pending_jobs)} jobs")
+
+
+# ---------------- WORKER ---------------- #
+
 async def run_worker():
     print("Worker started... waiting for jobs...")
 
+    db = SessionLocal()
+
+    # 🔥 Recover jobs at startup
+    recover_pending_jobs(db)
+
     while True:
+        try:
+            # ---------------- DELAYED JOBS ---------------- #
 
-        # ZSET: check scheduled (delayed) jobs
-        now = time.time()
+            now = time.time()
 
-        ready_jobs = redis_client.zrangebyscore(
-            "delayed_jobs",
-            0,
-            now
-        )
-
-        for job_str in ready_jobs:
-            job_data = json.loads(job_str)
-
-            # move to main queue
-            redis_client.lpush(
-                "job_queue",
-                json.dumps({"job_id": job_data["job_id"]})
+            ready_jobs = redis_client.zrangebyscore(
+                "delayed_jobs",
+                0,
+                now
             )
 
-            # remove from delayed set
-            redis_client.zrem("delayed_jobs", job_str)
+            for job_str in ready_jobs:
+                job_data = json.loads(job_str)
 
-            print(f"Moved scheduled job {job_data['job_id']} to main queue")
+                redis_client.lpush(
+                    "job_queue",
+                    json.dumps({"job_id": job_data["job_id"]})
+                )
 
-        db = SessionLocal()
+                redis_client.zrem("delayed_jobs", job_str)
 
-        try:
-            # non-blocking pop
+                print(f"Moved scheduled job {job_data['job_id']} to main queue")
+
+            # ---------------- FETCH JOB ---------------- #
+
             job_data = redis_client.brpop("job_queue", timeout=2)
 
             if not job_data:
@@ -53,9 +73,20 @@ async def run_worker():
             job_data = json.loads(job_data)
             job_id = job_data["job_id"]
 
-            print(f"Processing job: {job_id}")
+            
+            try:
+                job = db.query(Job).filter(Job.id == job_id).first()
+            except Exception as e:
+                print("DB error while fetching job:", str(e))
+                db.rollback()
 
-            job = db.query(Job).filter(Job.id == job_id).first()
+                # requeue job so it's not lost
+                redis_client.lpush(
+                    "job_queue",
+                    json.dumps({"job_id": job_id})
+                )
+
+                continue
 
             if not job:
                 print(f"Job {job_id} not found")
@@ -65,12 +96,29 @@ async def run_worker():
             if job.status != "pending":
                 continue
 
+            print(f"Processing job: {job_id}")
+
             job.status = "processing"
-            db.commit()
 
             try:
-                # Run AI pipeline
-                await asyncio.sleep(5)
+                db.commit()
+            except Exception as e:
+                print("DB commit error:", str(e))
+                db.rollback()
+
+                redis_client.lpush(
+                    "job_queue",
+                    json.dumps({"job_id": job.id})
+                )
+
+                continue
+
+            # ---------------- PROCESS JOB ---------------- #
+
+            try:
+                # simulate delay (optional)
+                # await asyncio.sleep(5)
+
                 result = await run_pipeline(job.submission.code)
 
                 job.result = result
@@ -92,15 +140,12 @@ async def run_worker():
 
                     delay = 2 ** job.retry_count
 
-                    # ZSET scheduling
                     redis_client.zadd(
                         "delayed_jobs",
                         {
                             json.dumps({"job_id": job.id}): time.time() + delay
                         }
                     )
-
-                    continue
 
                 else:
                     print(f"Job {job.id} failed after retries")
@@ -109,11 +154,26 @@ async def run_worker():
                     job.error = f"LLM failed after retries: {str(e)}"
                     db.commit()
 
+                    redis_client.lpush(
+                        "failed_jobs",
+                        json.dumps({
+                            "job_id": job.id,
+                            "error": job.error,
+                            "failed_at": time.time()
+                        })
+                    )
+
                     traceback.print_exc()
 
-        finally:
-            db.close()
+        except Exception as e:
+            print("Worker loop error:", str(e))
+            traceback.print_exc()
 
+        finally:
+            db.rollback()  # safety
+
+
+# ---------------- ENTRY ---------------- #
 
 if __name__ == "__main__":
     asyncio.run(run_worker())
