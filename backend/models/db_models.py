@@ -38,6 +38,7 @@ class Job(Base):
     submission = relationship("CodeSubmission")
 
     status = Column(String, default="pending")  # pending, processing, completed, failed
+    retry_count = Column(Integer, default=0)
 
     attempts = Column(Integer, default=0)
 

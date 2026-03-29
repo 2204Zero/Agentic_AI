@@ -10,7 +10,9 @@ from models.db_models import AnalysisResult
 from utils.auth import verify_password, create_access_token
 from utils.auth import get_current_user
 from models.db_models import CodeSubmission, Job
+from config.redis_client import redis_client
 import json
+
 
 
 router = APIRouter()
@@ -69,6 +71,14 @@ async def analyze_code(
     db.add(job)
     db.commit()
     db.refresh(job)
+
+    # push job to Redis queue
+    redis_client.lpush(
+        "job_queue",
+        json.dumps({
+            "job_id": job.id
+        })
+    )
 
     # 3. Return job_id instead of result
     return {

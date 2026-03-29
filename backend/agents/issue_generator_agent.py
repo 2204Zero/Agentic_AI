@@ -32,7 +32,7 @@ Code Analysis:
 
     response = await call_llm(prompt)
 
-    # ✅ FIX: handle both string and parsed output
+    # FIX: handle both string and parsed output
     parsed = response if not isinstance(response, str) else extract_json(response)
 
     # unwrap if needed

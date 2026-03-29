@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 
-load_dotenv(dotenv_path=".env")
+load_dotenv()
 from fastapi import FastAPI
 from api.routes import router
 from config.database import engine

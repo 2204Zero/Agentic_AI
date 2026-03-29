@@ -47,7 +47,7 @@ async def run_pipeline(code: str):
     analysis = await analyzer_agent(code)
 
     # DEBUG (optional, you can remove later)
-    print("ISSUE FUNCTION USED:", issue_generator_agent)
+    # print("ISSUE FUNCTION USED:", issue_generator_agent)
 
     issues = await issue_generator_agent(analysis)
     fixes = await fix_generator_agent(issues)
