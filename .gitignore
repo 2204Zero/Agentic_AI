@@ -1,1 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment
 .env
+
+# Vector DB
+backend/chroma_db/
+
+# Stored repos (user data)
+backend/repos/
+
+# VS Code
+.vscode/

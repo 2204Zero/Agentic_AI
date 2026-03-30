@@ -1,61 +1,74 @@
 def aggregate_results(file_results):
-    """
-    Smarter aggregation:
-    - deduplicate issues
-    - count frequency
-    - return top issues
-    """
-
-    total_files = len(file_results)
-
-    issue_map = {}  # {issue: {count, description}}
+    issue_counter = {}
+    issue_descriptions = {}
 
     for result in file_results:
+        if not result:
+            continue
+
         issues = result.get("issues", [])
 
         for item in issues:
-            issue_text = item.get("issue")
-            description = item.get("description", "")
 
-            if issue_text in issue_map:
-                issue_map[issue_text]["count"] += 1
+            # CASE 1: dict
+            if isinstance(item, dict):
+                issue_text = item.get("issue", "Unknown issue")
+                description = item.get("description", "")
+
+            # CASE 2: string
+            elif isinstance(item, str):
+                issue_text = item
+                description = ""
+
             else:
-                issue_map[issue_text] = {
-                    "description": description,
-                    "count": 1
-                }
+                continue
 
-    # sort by frequency (most common first)
-    sorted_issues = sorted(
-        issue_map.items(),
-        key=lambda x: x[1]["count"],
-        reverse=True
-    )
+            issue_counter[issue_text] = issue_counter.get(issue_text, 0) + 1
 
-    # format output
-    top_issues = []
-    for issue, data in sorted_issues[:10]:
-        top_issues.append({
+            if issue_text not in issue_descriptions:
+                issue_descriptions[issue_text] = description
+
+    top_issues = [
+        {
             "issue": issue,
-            "description": data["description"],
-            "count": data["count"]
-        })
+            "description": issue_descriptions.get(issue, ""),
+            "count": count
+        }
+        for issue, count in issue_counter.items()
+    ]
+
+    top_issues.sort(key=lambda x: x["count"], reverse=True)
 
     return {
-        "total_files": total_files,
-        "total_unique_issues": len(issue_map),
+        "total_files": len(file_results),
+        "total_unique_issues": len(issue_counter),
         "top_issues": top_issues
     }
 
 def calculate_repo_score(report):
     score = 100
 
-    issue_count = report.get("total_unique_issues", 0)
+    weights = {
+        "Security Vulnerability": 10,
+        "Null Reference": 8,
+        "Memory Leak": 9,
+        "Magic Number": 3,
+        "Unused Variable": 2,
+        "Unused Function": 3,
+        "Code Smell": 2,
+        "Inconsistent Naming Convention": 2,
+        "Missing Error Handling": 6
+    }
 
-    # simple scoring
-    score -= issue_count * 5
+    issues = report.get("top_issues", [])
 
-    # clamp
+    for issue in issues:
+        issue_name = issue["issue"]
+        count = issue.get("count", 1)
+
+        penalty = weights.get(issue_name, 4)  # default weight
+        score -= penalty * count
+
     score = max(0, min(100, score))
 
     # grading

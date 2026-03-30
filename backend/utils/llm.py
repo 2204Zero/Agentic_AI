@@ -1,5 +1,6 @@
 import httpx
 import json
+from config.settings import USE_LOCAL
 
 
 def extract_json(text: str):
@@ -40,7 +41,9 @@ def extract_json(text: str):
     }
 
 
-async def call_llm(prompt: str):
+# ---------------- LOCAL LLM ---------------- #
+
+async def call_ollama(prompt: str):
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             "http://localhost:11434/api/generate",
@@ -55,3 +58,21 @@ async def call_llm(prompt: str):
 
         # ALWAYS return STRING (no parsing here)
         return data.get("response", "")
+
+
+# ---------------- FUTURE API LLM ---------------- #
+
+async def call_api(prompt: str):
+    """
+    Placeholder for future (OpenAI / Groq)
+    """
+    return "API LLM not configured yet"
+
+
+# ---------------- MAIN ENTRY ---------------- #
+
+async def call_llm(prompt: str):
+    if USE_LOCAL:
+        return await call_ollama(prompt)
+    else:
+        return await call_api(prompt)
