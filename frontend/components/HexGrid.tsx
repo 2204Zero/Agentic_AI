@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 type Hex = {
   id: number;
@@ -75,27 +75,31 @@ function randomPositionAvoidCenter() {
   return p;
 }
 
-export default function HexGrid() {
-  const count = useMemo(() => randInt(6, 9), []);
-  const initial = useMemo(() => {
-    const pos = generateEdgeBiasedPositions(count);
-    return Array.from({ length: count }).map((_, i) => ({
-      id: i,
-      top: pos[i].top,
-      left: pos[i].left,
-      size: pickSize(),
-      opacity: 0,
-      driftX: randBetween(-10, 10),
-      driftY: randBetween(-10, 10),
-      duration: randBetween(6, 10),
-    })) as Hex[];
-  }, [count]);
-
-  const [hexes, setHexes] = useState<Hex[]>(initial);
+export default function HexGrid({ offsetX = 0, offsetY = 0 }: { offsetX?: number; offsetY?: number }) {
+  const [hexes, setHexes] = useState<Hex[]>([]);
   const timersRef = useRef<Map<number, number>>(new Map());
   const cycleRef = useRef<(idx: number) => void>(() => {});
 
   useEffect(() => {
+    // Initialize on client after mount to avoid SSR hydration mismatches
+    const count = randInt(6, 9);
+    const pos = generateEdgeBiasedPositions(count);
+    setHexes(
+      Array.from({ length: count }).map((_, i) => ({
+        id: i,
+        top: pos[i].top,
+        left: pos[i].left,
+        size: pickSize(),
+        opacity: 0,
+        driftX: randBetween(-10, 10),
+        driftY: randBetween(-10, 10),
+        duration: randBetween(6, 10),
+      }))
+    );
+  }, []);
+
+  useEffect(() => {
+    if (hexes.length === 0) return;
     cycleRef.current = (idx: number) => {
       setHexes((prev) => {
         const next = [...prev];
@@ -133,7 +137,7 @@ export default function HexGrid() {
       }, 2400);
       timersRef.current.set(idx, holdId);
     };
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < hexes.length; i++) {
       const startDelay = Math.floor(randBetween(0, 1000));
       const id = window.setTimeout(() => cycleRef.current(i), startDelay);
       timersRef.current.set(i, id);
@@ -142,10 +146,17 @@ export default function HexGrid() {
       timersRef.current.forEach((id) => window.clearTimeout(id));
       timersRef.current.clear();
     };
-  }, [count]);
+  }, [hexes.length]);
 
   return (
-    <div className="absolute inset-0 z-0 pointer-events-none">
+    <div
+      className="absolute inset-0 z-0 pointer-events-none"
+      style={{
+        transform: `translate(${offsetX}px, ${offsetY}px)`,
+        transition: 'transform 300ms ease-out',
+        willChange: 'transform',
+      }}
+    >
       {hexes.map((h) => {
         const hexHeight = h.size * 0.866;
         return (
